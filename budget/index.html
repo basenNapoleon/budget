@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Min Budget</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Budget">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <meta name="theme-color" content="#F5F4F1">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #F5F4F1; --card: #FFFFFF; --text: #111111; --text2: #6B6866;
+      --border: #E3E2DE; --green: #1A7A4A; --green-bg: #EAF5EE;
+      --red: #C0392B; --red-bg: #FDECEA; --accent: #4F46E5;
+      --nav-h: 60px;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --c-boende: #6C63D4; --c-csn: #C0506A; --c-transport: #1D9968;
+      --c-mat: #D05A2A; --c-ovrigt: #7A7870; --c-semester: #3070C4; --c-spar: #4A8C1A;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg); color: var(--text);
+      height: 100dvh; overflow: hidden;
+    }
+
+    /* Pages */
+    .page {
+      display: none; position: absolute; inset: 0;
+      bottom: calc(var(--nav-h) + var(--safe-bottom));
+      overflow-y: auto; -webkit-overflow-scrolling: touch;
+      padding-top: calc(var(--safe-top) + 0px);
+    }
+    .page.active { display: block; }
+
+    /* Header */
+    .page-header {
+      display: flex; align-items: baseline; justify-content: space-between;
+      padding: calc(var(--safe-top) + 1rem) 1.25rem 0.75rem;
+      position: sticky; top: 0; background: var(--bg); z-index: 5;
+    }
+    .app-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text2); }
+    .sub-label { font-size: 13px; color: var(--text2); }
+
+    /* Bottom nav */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: calc(var(--nav-h) + var(--safe-bottom));
+      padding-bottom: var(--safe-bottom);
+      background: rgba(245,244,241,0.92);
+      backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+      border-top: 1px solid var(--border);
+      display: flex; align-items: stretch; z-index: 20;
+    }
+    .nav-btn {
+      flex: 1; border: none; background: transparent;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 3px; font-family: inherit; font-size: 10px; font-weight: 500;
+      color: var(--text2); cursor: pointer; -webkit-tap-highlight-color: transparent;
+      padding-top: 8px;
+    }
+    .nav-btn svg { width: 22px; height: 22px; }
+    .nav-btn.active { color: var(--accent); }
+    .nav-btn.active svg { stroke: var(--accent); }
+    .nav-btn svg { stroke: var(--text2); fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Cards & rows */
+    .section { margin: 0 1.25rem 0.25rem; }
+    .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text2); padding: 0.75rem 0 0.4rem; }
+    .card { background: var(--card); border-radius: 14px; overflow: hidden; border: 1px solid var(--border); }
+    .row { display: flex; align-items: center; padding: 0.75rem 1rem; border-bottom: 1px solid var(--border); gap: 0.75rem; }
+    .row:last-child { border-bottom: none; }
+    .row-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .row-label { flex: 1; font-size: 15px; color: var(--text); }
+    .row-label small { display: block; font-size: 11px; color: var(--text2); margin-top: 1px; }
+    .budget-ref { color: var(--text2) !important; }
+    .row-value { font-size: 15px; font-weight: 500; }
+    .editable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    .editable:active { opacity: 0.55; }
+
+    /* Hero */
+    .hero { margin: 0 1.25rem 1rem; border-radius: 18px; padding: 1.25rem 1.5rem; transition: background .3s; }
+    .hero.positive { background: var(--green-bg); }
+    .hero.negative { background: var(--red-bg); }
+    .hero-label { font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 2px; }
+    .hero-amount { font-size: 52px; font-weight: 700; letter-spacing: -2px; line-height: 1; transition: color .3s; }
+    .hero.positive .hero-amount { color: var(--green); }
+    .hero.negative .hero-amount { color: var(--red); }
+    .hero-sub { margin-top: 0.5rem; font-size: 13px; color: var(--text2); display: flex; gap: 1rem; }
+
+    /* Bar */
+    .bar-wrap { margin: 0 1.25rem 1.25rem; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; display: flex; gap: 1.5px; }
+    .bar-seg { height: 100%; transition: width .25s ease; border-radius: 2px; }
+    .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 0 1.25rem 1.25rem; }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text2); }
+    .legend-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+    /* Banner */
+    .banner {
+      margin: 0 1.25rem 1rem; background: #FFF8E6; border: 1px solid #F0D070;
+      border-radius: 12px; padding: 0.7rem 1rem; display: flex; align-items: center;
+      gap: 0.6rem; font-size: 13px; color: #7A6010; cursor: pointer;
+    }
+    .banner-icon { font-size: 16px; }
+
+    /* Income row */
+    .income-row { display: flex; align-items: center; padding: 0.75rem 1rem; gap: 0.75rem; }
+    .income-label { flex: 1; font-size: 15px; font-weight: 600; }
+    .income-value { font-size: 15px; font-weight: 600; color: var(--accent); }
+
+    /* Month nav (Logg) */
+    .month-nav {
+      display: flex; align-items: center; justify-content: space-between;
+      margin: 0 1.25rem 0.75rem; background: var(--card);
+      border: 1px solid var(--border); border-radius: 14px; padding: 0.6rem 0.75rem;
+    }
+    .month-nav-btn {
+      background: none; border: none; font-size: 20px; color: var(--text2);
+      cursor: pointer; padding: 0.2rem 0.5rem; -webkit-tap-highlight-color: transparent;
+    }
+    .month-nav-btn:active { opacity: 0.5; }
+    .month-nav-center { text-align: center; }
+    .month-nav-label { font-size: 16px; font-weight: 600; }
+    .month-badge { font-size: 11px; font-weight: 600; margin-top: 2px; }
+    .badge-ok { color: var(--green); }
+    .badge-missing { color: var(--text2); }
+
+    /* Log summary */
+    .log-summary {
+      margin: 0.75rem 1.25rem 1.5rem; background: var(--card);
+      border: 1px solid var(--border); border-radius: 14px;
+      padding: 1rem; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem;
+    }
+    .sum-item { text-align: center; }
+    .sum-item-label { font-size: 11px; color: var(--text2); margin-bottom: 2px; }
+    .sum-item-val { font-size: 16px; font-weight: 600; }
+    .diff-ok  { color: var(--green); }
+    .diff-over { color: var(--red); }
+
+    /* Analys */
+    .analys-meta { margin: 0 1.25rem 0.75rem; font-size: 12px; color: var(--text2); }
+    .analys-summary {
+      margin: 0 1.25rem 0.25rem; background: var(--card);
+      border: 1px solid var(--border); border-radius: 14px;
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+    }
+    .a-sum-item { padding: 0.9rem 0.5rem; text-align: center; }
+    .a-sum-item + .a-sum-item { border-left: 1px solid var(--border); }
+    .a-sum-label { font-size: 11px; color: var(--text2); margin-bottom: 3px; }
+    .a-sum-val { font-size: 15px; font-weight: 600; }
+    .analys-header {
+      display: flex; padding: 0.5rem 1rem; gap: 0.5rem;
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--text2);
+    }
+    .a-row { display: flex; align-items: center; padding: 0.7rem 1rem; border-bottom: 1px solid var(--border); gap: 0.5rem; }
+    .a-row:last-child { border-bottom: none; }
+    .a-row-label { flex: 1; font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    .a-col { width: 58px; text-align: right; font-size: 13px; font-weight: 500; flex-shrink: 0; }
+    .a-col-head { width: 58px; text-align: right; flex-shrink: 0; }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 3rem 2rem; }
+    .empty-icon { font-size: 48px; margin-bottom: 1rem; }
+    .empty-title { font-size: 17px; font-weight: 600; margin-bottom: 0.5rem; }
+    .empty-text { font-size: 14px; color: var(--text2); line-height: 1.5; }
+
+    /* Modal */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 100;
+      display: flex; align-items: flex-end; opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--card); border-radius: 20px 20px 0 0;
+      padding: 1.25rem 1.5rem calc(1.5rem + var(--safe-bottom)); width: 100%;
+      transform: translateY(100%); transition: transform .25s cubic-bezier(.32,.72,0,1);
+    }
+    .modal-overlay.open .modal { transform: translateY(0); }
+    .modal-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 1rem; }
+    .modal-title { font-size: 13px; color: var(--text2); font-weight: 500; margin-bottom: 0.75rem; text-align: center; }
+    .modal-input-wrap { display: flex; align-items: center; gap: 0.5rem; background: var(--bg); border-radius: 12px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
+    .modal-input { flex: 1; font-size: 28px; font-weight: 600; border: none; background: transparent; color: var(--text); outline: none; width: 100%; font-family: inherit; }
+    .modal-currency { font-size: 18px; color: var(--text2); font-weight: 500; }
+    .modal-btn { width: 100%; background: var(--accent); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; padding: 0.875rem; cursor: pointer; font-family: inherit; }
+    .modal-btn:active { opacity: 0.85; }
+
+    .pb { padding-bottom: 1.5rem; }
+  </style>
+</head>
+<body>
+
+<!-- ===== BUDGET TAB ===== -->
+<div id="page-budget" class="page active">
+  <div class="page-header">
+    <span class="app-title">Min Budget</span>
+    <span class="sub-label" id="b-month-label"></span>
+  </div>
+
+  <div class="hero positive" id="b-hero">
+    <div class="hero-label">Kvar denna månad</div>
+    <div class="hero-amount" id="b-hero-amount">—</div>
+    <div class="hero-sub">
+      <span>Utgifter: <strong id="b-total">—</strong></span>
+      <span>Inkomst: <strong id="b-income-sub">—</strong></span>
+    </div>
+  </div>
+
+  <div class="bar-wrap" id="b-bar"></div>
+  <div class="legend" id="b-legend"></div>
+
+  <div class="banner" id="b-banner" style="display:none" onclick="showPage('logg')">
+    <span class="banner-icon">📝</span>
+    <span>Du har inte loggat <strong id="b-banner-month"></strong> än — tryck här</span>
+  </div>
+
+  <div class="section">
+    <div class="section-label">Inkomst</div>
+    <div class="card">
+      <div class="income-row">
+        <span class="income-label">Månadslön (netto)</span>
+        <span class="income-value editable" onclick="openModal('income','Inkomst','budget')">
+          <span id="b-income">32 000</span> kr
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div id="b-categories"></div>
+  <div class="pb"></div>
+</div>
+
+<!-- ===== LOGG TAB ===== -->
+<div id="page-logg" class="page">
+  <div class="page-header">
+    <span class="app-title">Utfall</span>
+    <span class="sub-label">faktisk spending</span>
+  </div>
+
+  <div class="month-nav">
+    <button class="month-nav-btn" onclick="changeLogMonth(-1)">‹</button>
+    <div class="month-nav-center">
+      <div class="month-nav-label" id="log-month-label">—</div>
+      <div class="month-badge" id="log-badge"></div>
+    </div>
+    <button class="month-nav-btn" id="log-next-btn" onclick="changeLogMonth(1)">›</button>
+  </div>
+
+  <div class="log-summary">
+    <div class="sum-item">
+      <div class="sum-item-label">Utfall</div>
+      <div class="sum-item-val" id="log-total">0 kr</div>
+    </div>
+    <div class="sum-item">
+      <div class="sum-item-label">Budget</div>
+      <div class="sum-item-val" id="log-budget-total">0 kr</div>
+    </div>
+    <div class="sum-item">
+      <div class="sum-item-label">Differens</div>
+      <div class="sum-item-val" id="log-diff">0 kr</div>
+    </div>
+  </div>
+
+  <div id="log-categories"></div>
+  <div class="pb"></div>
+</div>
+
+<!-- ===== ANALYS TAB ===== -->
+<div id="page-analys" class="page">
+  <div class="page-header">
+    <span class="app-title">Analys</span>
+    <span class="sub-label">budget vs. utfall</span>
+  </div>
+  <div id="analys-content"></div>
+  <div class="pb"></div>
+</div>
+
+<!-- Bottom nav -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="btn-budget" onclick="showPage('budget')">
+    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+    Budget
+  </button>
+  <button class="nav-btn" id="btn-logg" onclick="showPage('logg')">
+    <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+    Logg
+  </button>
+  <button class="nav-btn" id="btn-analys" onclick="showPage('analys')">
+    <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    Analys
+  </button>
+</nav>
+
+<!-- Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOverlay(event)">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="modal-title">Ändra belopp</div>
+    <div class="modal-input-wrap">
+      <input class="modal-input" id="modal-input" type="number" inputmode="numeric" min="0">
+      <span class="modal-currency">kr</span>
+    </div>
+    <button class="modal-btn" onclick="saveModal()">Spara</button>
+  </div>
+</div>
+
+<script>
+// ============= DATA =============
+const CATS = [
+  { id:'rent',    label:'Hyra',              note:'inkl. el & internet', section:'Boende',     color:'--c-boende'    },
+  { id:'csn',     label:'CSN',               note:'fast belopp',         section:'Skulder',    color:'--c-csn'       },
+  { id:'fuel',    label:'Diesel',            note:null,                  section:'Transport',  color:'--c-transport' },
+  { id:'ins',     label:'Bilförsäkring',     note:null,                  section:'Transport',  color:'--c-transport' },
+  { id:'serv',    label:'Service & däck',    note:'månadsavsättning',    section:'Transport',  color:'--c-transport' },
+  { id:'food',    label:'Livsmedel',         note:null,                  section:'Mat & nöje', color:'--c-mat'       },
+  { id:'resto',   label:'Restaurang',        note:null,                  section:'Mat & nöje', color:'--c-mat'       },
+  { id:'stream',  label:'Streaming & appar', note:null,                  section:'Mat & nöje', color:'--c-mat'       },
+  { id:'phone',   label:'Telefon',           note:null,                  section:'Övrigt',     color:'--c-ovrigt'    },
+  { id:'clothes', label:'Kläder & hygien',   note:null,                  section:'Övrigt',     color:'--c-ovrigt'    },
+  { id:'vacation',label:'Semester',          note:null,                  section:'Sparande',   color:'--c-semester'  },
+  { id:'save',    label:'Långsiktigt spar',  note:null,                  section:'Sparande',   color:'--c-spar'      },
+];
+
+const SEGMENTS = [
+  { ids:['rent'],                 label:'Boende',    color:'var(--c-boende)'    },
+  { ids:['csn'],                  label:'CSN',       color:'var(--c-csn)'       },
+  { ids:['fuel','ins','serv'],    label:'Transport', color:'var(--c-transport)' },
+  { ids:['food','resto','stream'],label:'Mat & nöje',color:'var(--c-mat)'       },
+  { ids:['phone','clothes'],      label:'Övrigt',    color:'var(--c-ovrigt)'    },
+  { ids:['vacation'],             label:'Semester',  color:'var(--c-semester)'  },
+  { ids:['save'],                 label:'Spar',      color:'var(--c-spar)'      },
+];
+
+const DEFAULTS = {
+  income:32000,rent:7500,csn:2210,fuel:4000,ins:700,serv:400,
+  food:2800,resto:600,stream:400,phone:400,clothes:700,vacation:500,save:500
+};
+
+const MONTHS = ['Januari','Februari','Mars','April','Maj','Juni',
+                'Juli','Augusti','September','Oktober','November','December'];
+
+const BUDGET_KEY = 'budget-v1';
+const LOG_KEY    = 'log-v1';
+
+let budget = {}, log = {};
+let currentLogMonth = null;
+
+// ============= LOAD / SAVE =============
+function loadAll() {
+  try { budget = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(BUDGET_KEY)||'{}') }; }
+  catch(e) { budget = { ...DEFAULTS }; }
+  try { log = JSON.parse(localStorage.getItem(LOG_KEY)||'{}'); }
+  catch(e) { log = {}; }
+  pruneLog();
+}
+
+function pruneLog() {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 12);
+  const cutKey = toKey(cutoff);
+  Object.keys(log).forEach(k => { if (k < cutKey) delete log[k]; });
+  localStorage.setItem(LOG_KEY, JSON.stringify(log));
+}
+
+function saveBudget() { localStorage.setItem(BUDGET_KEY, JSON.stringify(budget)); }
+function saveLog()    { localStorage.setItem(LOG_KEY, JSON.stringify(log)); }
+
+// ============= UTILS =============
+function toKey(d)  { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'); }
+function thisMonth(){ return toKey(new Date()); }
+function keyLabel(k){ const[y,m]=k.split('-'); return MONTHS[+m-1]+' '+y; }
+function fmt(n)    { return Math.round(n||0).toLocaleString('sv-SE'); }
+
+function groupedCats() {
+  const sections = {};
+  CATS.forEach(c => { (sections[c.section] = sections[c.section]||[]).push(c); });
+  return sections;
+}
+
+// ============= PAGE SWITCHING =============
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  document.getElementById('btn-'+name).classList.add('active');
+  if (name==='budget') renderBudget();
+  if (name==='logg')   renderLogg();
+  if (name==='analys') renderAnalys();
+}
+
+// ============= BUDGET TAB =============
+function renderBudget() {
+  const income = budget.income;
+  const total  = CATS.reduce((s,c) => s+(budget[c.id]||0), 0);
+  const left   = income - total;
+
+  document.getElementById('b-income').textContent = fmt(income);
+  document.getElementById('b-hero-amount').textContent = fmt(left)+' kr';
+  document.getElementById('b-total').textContent = fmt(total)+' kr';
+  document.getElementById('b-income-sub').textContent = fmt(income)+' kr';
+  document.getElementById('b-hero').className = 'hero '+(left>=0?'positive':'negative');
+
+  // Bar
+  const bar = document.getElementById('b-bar');
+  const leg = document.getElementById('b-legend');
+  bar.innerHTML = ''; leg.innerHTML = '';
+  SEGMENTS.forEach(seg => {
+    const st = seg.ids.reduce((s,id)=>s+(budget[id]||0),0);
+    const div = Object.assign(document.createElement('div'),{className:'bar-seg'});
+    div.style.cssText = `width:${Math.max(0,(st/income)*100).toFixed(1)}%;background:${seg.color}`;
+    bar.appendChild(div);
+    leg.innerHTML += `<div class="legend-item"><span class="legend-dot" style="background:${seg.color}"></span>${seg.label}: ${fmt(st)} kr</div>`;
+  });
+
+  // Banner
+  const tm = thisMonth();
+  const banner = document.getElementById('b-banner');
+  const logged = !!log[tm];
+  banner.style.display = logged ? 'none' : 'flex';
+  document.getElementById('b-banner-month').textContent = keyLabel(tm);
+
+  // Categories
+  const sections = groupedCats();
+  let html = '';
+  Object.entries(sections).forEach(([sec, cats]) => {
+    html += `<div class="section"><div class="section-label">${sec}</div><div class="card">`;
+    cats.forEach(c => {
+      html += `<div class="row">
+        <span class="row-dot" style="background:var(${c.color})"></span>
+        <span class="row-label">${c.label}${c.note?`<small>${c.note}</small>`:''}</span>
+        <span class="row-value editable" onclick="openModal('${c.id}','${c.label}','budget')">
+          <span id="b-${c.id}">${fmt(budget[c.id])}</span> kr
+        </span>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+  document.getElementById('b-categories').innerHTML = html;
+}
+
+// ============= LOGG TAB =============
+function renderLogg() {
+  if (!currentLogMonth) currentLogMonth = thisMonth();
+  const entry  = log[currentLogMonth] || {};
+  const isLogged = !!log[currentLogMonth];
+  const isThisMonth = currentLogMonth === thisMonth();
+
+  document.getElementById('log-month-label').textContent = keyLabel(currentLogMonth);
+  document.getElementById('log-badge').textContent = isLogged ? '✓ Sparad' : 'Inte loggad ännu';
+  document.getElementById('log-badge').className   = 'month-badge '+(isLogged?'badge-ok':'badge-missing');
+  document.getElementById('log-next-btn').style.opacity = isThisMonth ? '0.25' : '1';
+
+  const total  = CATS.reduce((s,c) => s+(entry[c.id]||0), 0);
+  const budgetTotal = CATS.reduce((s,c) => s+(budget[c.id]||0), 0);
+  const diff   = total - budgetTotal;
+
+  document.getElementById('log-total').textContent = fmt(total)+' kr';
+  document.getElementById('log-budget-total').textContent = fmt(budgetTotal)+' kr';
+  const dEl = document.getElementById('log-diff');
+  dEl.textContent = (diff>=0?'+':'')+fmt(diff)+' kr';
+  dEl.className   = 'sum-item-val '+(diff<=0?'diff-ok':'diff-over');
+
+  const sections = groupedCats();
+  let html = '';
+  Object.entries(sections).forEach(([sec, cats]) => {
+    html += `<div class="section"><div class="section-label">${sec}</div><div class="card">`;
+    cats.forEach(c => {
+      const actual = entry[c.id] ?? 0;
+      const bv     = budget[c.id] || 0;
+      html += `<div class="row">
+        <span class="row-dot" style="background:var(${c.color})"></span>
+        <span class="row-label">${c.label}
+          <small class="budget-ref">budget: ${fmt(bv)} kr</small>
+        </span>
+        <span class="row-value editable" onclick="openModal('${c.id}','${c.label}','log')">
+          <span id="lv-${c.id}">${fmt(actual)}</span> kr
+        </span>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+  document.getElementById('log-categories').innerHTML = html;
+}
+
+function changeLogMonth(delta) {
+  const [y,m] = currentLogMonth.split('-').map(Number);
+  const d = new Date(y, m-1+delta, 1);
+  const nk = toKey(d);
+  if (nk > thisMonth()) return;
+  currentLogMonth = nk;
+  renderLogg();
+}
+
+// ============= ANALYS TAB =============
+function renderAnalys() {
+  const keys = Object.keys(log).sort();
+  const container = document.getElementById('analys-content');
+
+  if (keys.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-title">Ingen data än</div><div class="empty-text">Börja logga månader i Logg-fliken, så visas din statistik här.</div></div>`;
+    return;
+  }
+
+  const n = keys.length;
+  const avgs = {};
+  CATS.forEach(c => {
+    avgs[c.id] = keys.reduce((s,k)=>s+(log[k]?.[c.id]||0),0) / n;
+  });
+
+  const budgetTotal = CATS.reduce((s,c)=>s+(budget[c.id]||0),0);
+  const avgTotal    = CATS.reduce((s,c)=>s+(avgs[c.id]||0),0);
+  const totalDiff   = avgTotal - budgetTotal;
+
+  const range = n===1 ? keyLabel(keys[0]) : keyLabel(keys[0])+' – '+keyLabel(keys[n-1]);
+
+  let html = `
+    <div class="analys-meta">Baserat på ${n} månad${n!==1?'er':''} (${range})</div>
+    <div class="analys-summary">
+      <div class="a-sum-item"><div class="a-sum-label">Budget/mån</div><div class="a-sum-val">${fmt(budgetTotal)} kr</div></div>
+      <div class="a-sum-item"><div class="a-sum-label">Snitt utfall</div><div class="a-sum-val">${fmt(avgTotal)} kr</div></div>
+      <div class="a-sum-item"><div class="a-sum-label">Differens</div><div class="a-sum-val ${totalDiff<=0?'diff-ok':'diff-over'}">${totalDiff>=0?'+':''}${fmt(totalDiff)} kr</div></div>
+    </div>`;
+
+  const sections = groupedCats();
+  Object.entries(sections).forEach(([sec, cats]) => {
+    html += `<div class="section"><div class="section-label">${sec}</div><div class="card">
+      <div class="analys-header">
+        <span style="flex:1">Kategori</span>
+        <span class="a-col-head">Budget</span>
+        <span class="a-col-head">Snitt</span>
+        <span class="a-col-head">Diff</span>
+      </div>`;
+    cats.forEach(c => {
+      const bv   = budget[c.id]||0;
+      const av   = avgs[c.id]||0;
+      const diff = av - bv;
+      html += `<div class="a-row">
+        <span class="a-row-label">
+          <span class="row-dot" style="background:var(${c.color})"></span>
+          ${c.label}
+        </span>
+        <span class="a-col">${fmt(bv)}</span>
+        <span class="a-col">${fmt(av)}</span>
+        <span class="a-col ${diff<=0?'diff-ok':'diff-over'}">${diff>=0?'+':''}${fmt(diff)}</span>
+      </div>`;
+    });
+    html += `</div></div>`;
+  });
+
+  container.innerHTML = html;
+}
+
+// ============= MODAL =============
+let modalCtx = null;
+
+function openModal(key, label, scope) {
+  modalCtx = { key, scope };
+  document.getElementById('modal-title').textContent = label;
+  const val = scope==='budget' ? (budget[key]||0) : (log[currentLogMonth]?.[key]||0);
+  document.getElementById('modal-input').value = val || '';
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('modal-input').focus(), 300);
+}
+
+function saveModal() {
+  if (!modalCtx) return;
+  const val = parseInt(document.getElementById('modal-input').value)||0;
+  if (modalCtx.scope === 'budget') {
+    budget[modalCtx.key] = val;
+    saveBudget();
+    renderBudget();
+  } else {
+    if (!log[currentLogMonth]) log[currentLogMonth] = {};
+    log[currentLogMonth][modalCtx.key] = val;
+    saveLog();
+    renderLogg();
+  }
+  closeModal();
+}
+
+function closeModalOverlay(e) { if (e.target===document.getElementById('modal-overlay')) closeModal(); }
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); modalCtx=null; }
+
+document.getElementById('modal-input').addEventListener('keydown', e => { if(e.key==='Enter') saveModal(); });
+
+// ============= BOOT =============
+loadAll();
+const now = new Date();
+document.getElementById('b-month-label').textContent = MONTHS[now.getMonth()]+' '+now.getFullYear();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+showPage('budget');
+</script>
+</body>
+</html>
