@@ -430,6 +430,16 @@ function pruneLog(){
 // ======= UTILS =======
 function toKey(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
 function thisMonth(){return toKey(new Date())}
+// Vilken period är "aktiv" i Logg-fliken just nu, enligt 25-25-regeln.
+// En period (t.ex. "Juli" = 25 jun–25 jul) blir bara nåbar/aktiv efter att
+// den faktiskt avslutats, dvs efter den 25:e i sin egen kalendermånad —
+// återanvänder periodComplete() som redan gäller för Analys.
+function currentLogPeriodKey(){
+  let k=thisMonth();
+  let guard=0;
+  while(!periodComplete(k)&&guard<3){k=shiftMonthKey(k,-1);guard++;}
+  return k;
+}
 function shiftMonthKey(key,delta){const[y,m]=key.split('-').map(Number);return toKey(new Date(y,m-1+delta,1))}
 function periodComplete(k){const[y,m]=k.split('-').map(Number);return new Date()>new Date(y,m-1,25,23,59,59)}
 function keyLabel(k){const[y,m]=k.split('-');return MONTHS_FULL[+m-1]+' '+y}
@@ -486,7 +496,7 @@ function renderBudget(){
   });
 
   // Banner
-  const tm=thisMonth();
+  const tm=currentLogPeriodKey();
   document.getElementById('b-banner').style.display=log[tm]?'none':'flex';
   document.getElementById('b-banner-month').textContent=keyLabel(tm);
 
@@ -548,7 +558,7 @@ function buildLogPaneHTML(key){
 // Re-renders header (month label, period, badge, prev/next-disabled state) for currentLogMonth
 function renderLogHeader(){
   const isLogged=!!log[currentLogMonth];
-  const isCurrent=currentLogMonth===thisMonth();
+  const isCurrent=currentLogMonth===currentLogPeriodKey();
   document.getElementById('log-month-label').textContent=keyLabel(currentLogMonth);
   document.getElementById('log-period-sub').textContent=periodLabel(currentLogMonth);
   document.getElementById('log-badge').textContent=isLogged?'✓ Sparad':'Inte loggad ännu';
@@ -558,25 +568,32 @@ function renderLogHeader(){
 
 // Full (re)render of the three panes around currentLogMonth, used on tab open / after navigation
 function renderLogg(){
-  if(!currentLogMonth)currentLogMonth=thisMonth();
+  if(!currentLogMonth)currentLogMonth=currentLogPeriodKey();
+  refreshLogVw();
   renderLogHeader();
   document.getElementById('log-pane-prev').innerHTML=buildLogPaneHTML(shiftMonthKey(currentLogMonth,-1));
   document.getElementById('log-pane-cur').innerHTML=buildLogPaneHTML(currentLogMonth);
-  document.getElementById('log-pane-next').innerHTML=currentLogMonth===thisMonth()?'':buildLogPaneHTML(shiftMonthKey(currentLogMonth,1));
+  document.getElementById('log-pane-next').innerHTML=currentLogMonth===currentLogPeriodKey()?'':buildLogPaneHTML(shiftMonthKey(currentLogMonth,1));
   logSetTransform(0,false);
 }
 
 function changeLogMonth(delta){
   const nk=shiftMonthKey(currentLogMonth,delta);
-  if(nk>thisMonth())return;
+  if(nk>currentLogPeriodKey())return;
   currentLogMonth=nk;renderLogg();
 }
 
 // ======= LOGG SWIPE (checklist-style: track follows finger, 3 panes, snap/recenter) =======
 const logTrack=document.getElementById('log-track');
 const logViewport=document.getElementById('log-viewport');
-let logVw=logViewport.clientWidth;
-window.addEventListener('resize',()=>{logVw=logViewport.clientWidth;});
+let logVw=0;
+function refreshLogVw(){
+  // Måste räknas om varje gång Logg-fliken visas, eftersom den har display:none
+  // när den inte är aktiv -> clientWidth skulle annars läsas som 0 och aldrig uppdateras.
+  const w=logViewport.clientWidth;
+  if(w>0)logVw=w;
+}
+window.addEventListener('resize',refreshLogVw);
 
 function logSetTransform(px,animate){
   logTrack.style.transition=animate?'transform .28s cubic-bezier(.32,.72,0,1)':'none';
@@ -586,6 +603,7 @@ function logSetTransform(px,animate){
 let logDragging=false,logLockedAxis=null,logStartX=0,logStartY=0,logDx=0;
 
 function logOnStart(x,y){
+  refreshLogVw();
   logDragging=true;logLockedAxis=null;logStartX=x;logStartY=y;logDx=0;
   logSetTransform(0,false);
 }
@@ -599,7 +617,7 @@ function logOnMove(x,y){
     let proposed=ddx;
     // Samma spärr som tidigare: kan aldrig swipa förbi nuvarande månad framåt.
     // Ingen spärr bakåt (obegränsad historik).
-    if(currentLogMonth===thisMonth()) proposed=Math.max(proposed,0);
+    if(currentLogMonth===currentLogPeriodKey()) proposed=Math.max(proposed,0);
     logDx=proposed;
     logSetTransform(logDx,false);
   }
